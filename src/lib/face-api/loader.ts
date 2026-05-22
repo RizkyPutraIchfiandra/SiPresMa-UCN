@@ -7,21 +7,46 @@ import * as faceapi from "face-api.js";
  * module level so repeated calls (across page navigations) are no-ops.
  */
 
-const MODEL_URL = "/models";
+// Primary location: bundled with the deployment under /public/models.
+const LOCAL_MODEL_URL = "/models";
+// Fallback: pull straight from the upstream face-api.js weights repo via
+// jsDelivr's CDN. This keeps the app working even if /public/models is
+// missing on a fresh deployment (e.g. when the prebuild script didn't run).
+const CDN_MODEL_URL =
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights";
+
 let loadPromise: Promise<void> | null = null;
+
+async function loadFromUri(uri: string) {
+  await Promise.all([
+    faceapi.nets.ssdMobilenetv1.loadFromUri(uri),
+    faceapi.nets.faceLandmark68Net.loadFromUri(uri),
+    faceapi.nets.faceRecognitionNet.loadFromUri(uri),
+  ]);
+}
 
 export function loadFaceApiModels(): Promise<void> {
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
-    await Promise.all([
-      faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
-      faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
-      faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
-    ]);
+    try {
+      await loadFromUri(LOCAL_MODEL_URL);
+    } catch (localErr) {
+      // Local /models missing or corrupted — fall back to the CDN once.
+      console.warn(
+        "[face-api] Local /models load failed, falling back to CDN.",
+        localErr
+      );
+      try {
+        await loadFromUri(CDN_MODEL_URL);
+      } catch (cdnErr) {
+        console.error("[face-api] CDN fallback also failed.", cdnErr);
+        throw cdnErr;
+      }
+    }
   })();
 
-  // Reset on error so the next attempt can retry.
+  // Reset on error so the next attempt can retry from scratch.
   loadPromise.catch(() => {
     loadPromise = null;
   });

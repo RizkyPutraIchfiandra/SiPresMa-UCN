@@ -56,7 +56,7 @@ export const FaceScanner = React.forwardRef<FaceScannerHandle, FaceScannerProps>
           console.error(err);
           if (!cancelled) {
             setError(
-              "Failed to load face recognition models. Did you download them into /public/models?"
+              "Gagal memuat model pengenalan wajah. Periksa koneksi internet lalu muat ulang halaman."
             );
           }
         });
@@ -78,7 +78,7 @@ export const FaceScanner = React.forwardRef<FaceScannerHandle, FaceScannerProps>
             !navigator.mediaDevices?.getUserMedia
           ) {
             throw new Error(
-              "Camera API is unavailable. Make sure you're using a modern browser over http://localhost or HTTPS."
+              "Akses kamera tidak tersedia. Gunakan browser modern (Chrome, Edge, Firefox, Safari) dan pastikan situs dibuka via HTTPS."
             );
           }
 
@@ -100,27 +100,27 @@ export const FaceScanner = React.forwardRef<FaceScannerHandle, FaceScannerProps>
           setCameraReady(true);
         } catch (err) {
           console.error("[FaceScanner] camera error:", err);
-          // Surface a helpful, specific message based on the DOMException name.
-          let message = "Could not access the camera.";
+          // Pesan spesifik berdasarkan jenis DOMException dari browser.
+          let message = "Tidak bisa mengakses kamera.";
           if (err instanceof Error) {
             const name = (err as DOMException).name ?? err.name;
             if (name === "NotAllowedError" || name === "PermissionDeniedError") {
               message =
-                "Camera permission was denied. Click the camera icon in the address bar, allow access, then reload.";
+                "Akses kamera ditolak. Klik ikon kamera di address bar browser, izinkan akses, lalu muat ulang halaman.";
             } else if (name === "NotFoundError" || name === "DevicesNotFoundError") {
               message =
-                "No camera was found on this device. Plug one in or try a different device.";
+                "Tidak ada kamera yang terdeteksi di perangkat ini.";
             } else if (name === "NotReadableError" || name === "TrackStartError") {
               message =
-                "Camera is already in use by another app (Zoom, Meet, OBS, etc.). Close it and reload.";
+                "Kamera sedang digunakan aplikasi lain (Zoom, Meet, OBS). Tutup aplikasi tersebut lalu muat ulang halaman.";
             } else if (name === "OverconstrainedError") {
               message =
-                "Your camera doesn't support the requested settings. Try a different camera.";
+                "Kamera Anda tidak mendukung pengaturan yang diminta. Coba dengan kamera lain.";
             } else if (name === "SecurityError") {
               message =
-                "Browser blocked the camera. Open the site via http://localhost or HTTPS, not an http://IP address.";
+                "Browser memblokir akses kamera. Pastikan situs dibuka via HTTPS, bukan HTTP.";
             } else if (err.message) {
-              message = `Could not access the camera: ${err.message}`;
+              message = `Tidak bisa mengakses kamera: ${err.message}`;
             }
           }
           setError(message);

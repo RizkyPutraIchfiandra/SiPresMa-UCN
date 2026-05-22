@@ -1,7 +1,12 @@
 // Downloads the face-api.js weights into /public/models.
-// Usage: `node scripts/download-face-models.mjs`
+//
+// This script is idempotent: it skips files that are already present and
+// have non-zero size. That makes it safe to wire into `prebuild` so every
+// production build (Vercel, Docker, etc.) automatically has the models.
+//
+// Manual usage: `node scripts/download-face-models.mjs`
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -27,18 +32,39 @@ if (!existsSync(outDir)) {
   await mkdir(outDir, { recursive: true });
 }
 
+let downloaded = 0;
+let skipped = 0;
+
 for (const file of FILES) {
-  const url = `${BASE}/${file}`;
   const dest = path.join(outDir, file);
+
+  // Skip if file already present with a non-trivial size.
+  if (existsSync(dest)) {
+    const st = await stat(dest);
+    if (st.size > 1024) {
+      skipped++;
+      continue;
+    }
+  }
+
+  const url = `${BASE}/${file}`;
   process.stdout.write(`Downloading ${file}... `);
-  const res = await fetch(url);
-  if (!res.ok) {
-    console.error(`FAILED (${res.status})`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      console.error(`FAILED (HTTP ${res.status})`);
+      process.exit(1);
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    await writeFile(dest, buf);
+    downloaded++;
+    console.log(`ok (${(buf.length / 1024).toFixed(1)} KB)`);
+  } catch (err) {
+    console.error(`FAILED: ${err.message ?? err}`);
     process.exit(1);
   }
-  const buf = Buffer.from(await res.arrayBuffer());
-  await writeFile(dest, buf);
-  console.log("ok");
 }
 
-console.log(`\nDone. Files saved to ${outDir}`);
+console.log(
+  `\nDone. ${downloaded} downloaded, ${skipped} already present. Files saved to ${outDir}`
+);
