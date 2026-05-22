@@ -1,0 +1,114 @@
+# Project Prompt: Dashboard Absensi dengan Face Recognition
+
+## Goal
+Bangun aplikasi web dashboard absensi yang menggunakan face recognition. User (mahasiswa/karyawan) didaftarkan dulu wajahnya, lalu untuk absen tinggal scan kamera dan sistem otomatis menampilkan "Absensi Berhasil" beserta Nama dan NIM.
+
+## Tech Stack
+- **Framework**: Next.js 14+ (App Router) + TypeScript
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Database**: PostgreSQL (Neon / Vercel Postgres / Supabase) - pakai connection pooling biar aman di serverless
+- **ORM**: Prisma
+- **Face Recognition**: face-api.js (client-side, model: SsdMobilenetv1 + FaceLandmark68 + FaceRecognitionNet) — descriptor 128-d disimpan di DB
+- **Auth Admin**: NextAuth.js (Credentials provider) untuk dashboard admin
+- **Deployment**: Vercel
+- **Validation**: Zod
+- **State/Data**: TanStack Query (opsional untuk dashboard)
+
+## Design Patterns yang Wajib Diterapkan
+Implementasikan dengan jelas (bukan sekadar nama folder):
+
+1. **Repository Pattern** — abstraksi akses data (UserRepository, AttendanceRepository) di atas Prisma
+2. **Service Layer Pattern** — business logic dipisah dari route handler (AttendanceService, FaceRecognitionService, UserService)
+3. **DTO Pattern** — request/response object terpisah dari entity DB, validasi pakai Zod
+4. **Factory Pattern** — buat factory untuk membuat instance service/repository (atau pakai DI container sederhana)
+5. **Strategy Pattern** — untuk algoritma face matching (misal: EuclideanDistance vs CosineSimilarity), biar gampang ganti strategi
+6. **Singleton Pattern** — untuk Prisma client instance (penting di serverless biar gak bocor koneksi)
+7. **Observer Pattern** (opsional) — untuk event saat absensi berhasil (logging, notif, dll)
+
+## Struktur Folder yang Diharapkan
+src/
+├── app/
+│   ├── (admin)/dashboard/        # halaman admin
+│   ├── (public)/scan/            # halaman scan absensi
+│   ├── (public)/register/        # halaman registrasi wajah
+│   └── api/
+│       ├── users/
+│       ├── attendance/
+│       └── face/
+├── core/
+│   ├── domain/                   # entities, value objects
+│   ├── repositories/             # interfaces
+│   └── services/                 # business logic
+├── infrastructure/
+│   ├── database/                 # prisma client (singleton)
+│   ├── repositories/             # impl repository
+│   └── strategies/               # face matching strategies
+├── lib/
+│   ├── face-api/                 # loader & helper face-api.js
+│   └── validators/               # zod schemas
+└── components/
+├── ui/                       # shadcn
+├── face-scanner/
+└── dashboard/
+
+
+## Database Schema (Prisma)
+- **User**: id, nim, name, email, faceDescriptor (Float[] / Json), createdAt
+- **Attendance**: id, userId (FK), timestamp, status (PRESENT/LATE), confidence (Float)
+- **AdminUser**: id, username, passwordHash, role
+- Index pada `nim` (unique) dan `userId + timestamp` untuk query cepat
+
+## Fitur yang Harus Ada
+
+### 1. Halaman Registrasi Wajah (`/register`)
+- Form: NIM, Nama, Email
+- Buka kamera, capture wajah (minimal 3 kali untuk averaging descriptor)
+- Hitung face descriptor di client, kirim ke API
+- Simpan ke DB
+- Validasi: wajah harus terdeteksi dengan jelas, NIM tidak duplikat
+
+### 2. Halaman Scan Absensi (`/scan`)
+- Buka kamera, deteksi wajah real-time
+- Saat wajah terdeteksi, hitung descriptor lalu kirim ke API matching
+- API akan cari user terdekat (Euclidean distance < threshold 0.6)
+- Tampilkan card: ✅ "Absensi Berhasil" + Nama + NIM + Jam
+- Kalau gak match: ❌ "Wajah tidak dikenali"
+- Anti-spam: 1 user hanya bisa absen sekali per hari (atau per sesi)
+
+### 3. Dashboard Admin (`/dashboard`) — perlu login
+- Statistik: total user, absen hari ini, persentase kehadiran
+- Tabel daftar user terdaftar (dengan aksi delete/edit)
+- Tabel riwayat absensi (filter per tanggal, search by nama/NIM)
+- Export CSV
+- Chart kehadiran 7 hari terakhir
+
+## API Routes
+- `POST /api/users/register` — register user + face descriptor
+- `GET /api/users` — list user (admin only)
+- `DELETE /api/users/:id` — hapus user
+- `POST /api/attendance/scan` — match descriptor & catat absensi
+- `GET /api/attendance` — list absensi (filter date)
+- `POST /api/auth/login` — admin login
+
+## Requirements Penting
+- Semua file model face-api.js taruh di `/public/models` (download dari repo face-api.js)
+- Pakai `useEffect` cleanup untuk matikan kamera saat unmount
+- PrismaClient pakai global singleton (cek `globalThis.prisma`) — wajib untuk Vercel serverless
+- Environment variable: `DATABASE_URL`, `DIRECT_URL` (untuk migration), `NEXTAUTH_SECRET`, `NEXTAUTH_URL`
+- Set `runtime = 'nodejs'` di route yang pakai Prisma (jangan edge)
+- Tambahin `vercel.json` kalau perlu, dan pastikan `postinstall` script jalan `prisma generate`
+- Threshold matching configurable via env (`FACE_MATCH_THRESHOLD=0.6`)
+- Error handling konsisten: pakai custom error class (DomainError, NotFoundError, ValidationError)
+
+## Deliverables
+1. Source code lengkap dengan struktur di atas
+2. README.md dengan: cara setup, env variables, cara download model face-api, cara deploy ke Vercel
+3. Prisma migration files
+4. Seed script untuk admin default
+5. Minimal 1 contoh unit test untuk service layer (pakai Vitest atau Jest)
+
+## Catatan Tambahan
+- UI bersih, modern, responsive (mobile-first karena absensi sering dari HP)
+- Loading state & error state harus jelas di setiap halaman
+- Jangan simpan foto wajah, cukup descriptor 128-d (lebih privacy-friendly + hemat storage)
+- Beri komentar di tiap design pattern yang dipakai biar gampang di-review

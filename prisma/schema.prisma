@@ -1,0 +1,56 @@
+// Prisma schema for the attendance dashboard.
+// `directUrl` is used by `prisma migrate`; `url` is the pooled URL used by the app at runtime.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  LATE
+}
+
+enum AdminRole {
+  ADMIN
+  SUPER_ADMIN
+}
+
+model User {
+  id             String       @id @default(cuid())
+  nim            String       @unique
+  name           String
+  email          String       @unique
+  // 128-d face descriptor stored as a JSON array of floats (no photo is stored).
+  faceDescriptor Json
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  attendances    Attendance[]
+
+  @@index([nim])
+}
+
+model Attendance {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timestamp  DateTime         @default(now())
+  status     AttendanceStatus @default(PRESENT)
+  confidence Float
+
+  @@index([userId, timestamp])
+  @@index([timestamp])
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  role         AdminRole @default(ADMIN)
+  createdAt    DateTime  @default(now())
+}
